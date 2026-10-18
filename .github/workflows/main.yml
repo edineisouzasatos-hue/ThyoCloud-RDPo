@@ -1,0 +1,73 @@
+name: Windows Cloud PC - AnyDesk (Optimized)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Start Building...
+    runs-on: windows-latest
+    # Ajuste o timeout conforme sua necessidade / limites do runner
+    timeout-minutes: 10080 # 7 dias (note as limitações do GitHub-hosted runner)
+    steps:
+      - name: Checkout repository (opcional)
+        uses: actions/checkout@v4
+
+      - name: Downloading & Installing Essentials
+        shell: powershell
+        run: |
+          Write-Host "Baixando Downloads.bat..."
+          Invoke-WebRequest -Uri "https://www.dropbox.com/scl/fi/7eiczvgil84czu55dxep3/Downloads.bat?rlkey=wzdc1wxjsph2b7r0atplmdz3p&dl=1" -OutFile "Downloads.bat"
+          Write-Host "Executando Downloads.bat..."
+          # Executa o script .bat para instalar os componentes
+          cmd /c Downloads.bat
+
+      - name: Log In To AnyDesk
+        shell: powershell
+        run: |
+          Write-Host "Tentando iniciar AnyDesk via start.bat (se existir)..."
+          if (Test-Path "start.bat") {
+            # Executa start.bat em uma nova janela para não bloquear (opcional)
+            Start-Process -FilePath "cmd.exe" -ArgumentList "/c start.bat" -WindowStyle Hidden
+            Write-Host "start.bat iniciado."
+          } else {
+            Write-Host "Arquivo start.bat não encontrado. Verifique a configuração."
+          }
+
+      - name: Monitor and Restart AnyDesk if Needed
+        shell: powershell
+        run: |
+          Write-Host "Iniciando monitoramento do processo AnyDesk. Esta etapa ficará em execução."
+          while ($true) {
+            $process = Get-Process -Name "AnyDesk" -ErrorAction SilentlyContinue
+            if (-not $process) {
+              Write-Host "$(Get-Date -Format o) - AnyDesk não está rodando, reiniciando via start.bat..."
+              if (Test-Path "start.bat") {
+                Start-Process -FilePath "cmd.exe" -ArgumentList "/c start.bat" -WindowStyle Hidden
+              } else {
+                Write-Host "start.bat não encontrado. Impossível reiniciar AnyDesk."
+              }
+            } else {
+              Write-Host "$(Get-Date -Format o) - AnyDesk rodando. PID(s): $($process.Id -join ', ')"
+            }
+            Start-Sleep -Seconds 300 # Verifica a cada 5 minutos
+          }
+
+      - name: Time Counter (Long Running Task)
+        if: false
+        # Esta etapa está desativada porque a etapa de monitoramento já é um loop infinito.
+        # Se preferir usar um sleep de 7 dias em vez do loop acima, remova o if: false e ajuste conforme necessário.
+        shell: powershell
+        run: |
+          Write-Host "Mantendo máquina acordada por 7 dias..."
+          Start-Sleep -Seconds 604800 # 7 dias em segundos
+
+      - name: Clean Up Temporary Files
+        if: success()
+        shell: powershell
+        run: |
+          Write-Host "Removendo arquivos temporários..."
+          if (Test-Path "Downloads.bat") {
+            Remove-Item Downloads.bat -Force -ErrorAction SilentlyContinue
+          }
+          Write-Host "Limpeza completa."
